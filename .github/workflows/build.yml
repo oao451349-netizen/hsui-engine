@@ -39,6 +39,8 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "OPENCV_DIR=$HOME/OpenCV-android-sdk/sdk/native/jni" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
 
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
