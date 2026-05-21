@@ -21,7 +21,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK and CMake
+      - name: Install NDK 25.2.9519653 and CMake
         run: sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
 
       - name: Install Gradle 8.7
@@ -38,7 +38,6 @@ jobs:
       - name: Create config files
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ndk.dir=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> local.properties
           echo "OPENCV_DIR=$HOME/OpenCV-android-sdk/sdk/native/jni" >> gradle.properties
 
       - name: Build debug APK
