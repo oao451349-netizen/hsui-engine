@@ -1,8 +1,5 @@
 package com.example.engine
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.Color
@@ -15,15 +12,11 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.app.NotificationCompat
 import kotlin.math.sqrt
 
 class FloatingButtonService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "hsui_float_channel"
-        const val NOTIFICATION_ID = 2
-
         @Volatile
         var isRunning = false
     }
@@ -33,8 +26,6 @@ class FloatingButtonService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
         isRunning = true
         showFloatingButton()
     }
@@ -64,8 +55,7 @@ class FloatingButtonService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 20
-            y = 400
+            x = 20; y = 400
         }
 
         var initialX = 0; var initialY = 0
@@ -87,9 +77,7 @@ class FloatingButtonService : Service() {
                     params.y = initialY + dy.toInt()
                     windowManager?.updateViewLayout(container, params)
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!isDrag) performDodge()
-                }
+                MotionEvent.ACTION_UP -> { if (!isDrag) performDodge() }
             }
             true
         }
@@ -98,7 +86,6 @@ class FloatingButtonService : Service() {
         try {
             windowManager?.addView(container, params)
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка наложения: ${e.message}", Toast.LENGTH_SHORT).show()
             stopSelf()
         }
     }
@@ -112,8 +99,7 @@ class FloatingButtonService : Service() {
         val dm = resources.displayMetrics
         val cx = dm.widthPixels / 2
         val cy = dm.heightPixels / 2
-        val offset = dm.heightPixels / 5
-        svc.dispatchAvoidanceSwipe(cx, cy, cx, cy - offset)
+        svc.dispatchAvoidanceSwipe(cx, cy, cx, cy - dm.heightPixels / 5)
     }
 
     override fun onDestroy() {
@@ -123,18 +109,4 @@ class FloatingButtonService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    private fun createNotificationChannel() {
-        val ch = NotificationChannel(CHANNEL_ID, "HSUI Кнопка уворота", NotificationManager.IMPORTANCE_LOW)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-    }
-
-    private fun buildNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Кнопка уворота активна ⚡")
-            .setContentText("Нажмите на кнопку в игре для уворота")
-            .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
 }
