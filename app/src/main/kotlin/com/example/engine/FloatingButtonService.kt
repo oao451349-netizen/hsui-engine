@@ -1,5 +1,8 @@
 package com.example.engine
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.Color
@@ -9,104 +12,95 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.ImageButton
+import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
-import kotlin.math.abs
+import androidx.core.app.NotificationCompat
 import kotlin.math.sqrt
 
 class FloatingButtonService : Service() {
 
     companion object {
+        const val CHANNEL_ID = "hsui_float_channel"
+        const val NOTIFICATION_ID = 2
+
         @Volatile
         var isRunning = false
     }
 
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
-    private var initialX = 0
-    private var initialY = 0
-    private var initialTouchX = 0f
-    private var initialTouchY = 0f
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification())
         isRunning = true
         showFloatingButton()
     }
 
     private fun showFloatingButton() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        val dm = resources.displayMetrics
+        val sizePx = (72 * dm.density).toInt()
 
-        val button = ImageButton(this).apply {
-            setBackgroundColor(Color.argb(200, 255, 80, 80))
-            setImageDrawable(null)
-            setPadding(20, 20, 20, 20)
-            contentDescription = "Уворот"
-        }
-
-        // Draw "!" text on button
-        val label = android.widget.TextView(this).apply {
+        val container = FrameLayout(this)
+        val label = TextView(this).apply {
             text = "⚡"
-            textSize = 24f
+            textSize = 26f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
-
-        val container = android.widget.FrameLayout(this).apply {
-            val size = (80 * resources.displayMetrics.density).toInt()
-            layoutParams = android.widget.FrameLayout.LayoutParams(size, size)
-            background = resources.getDrawable(android.R.drawable.btn_default, null)
-            setBackgroundColor(Color.argb(210, 220, 50, 50))
-            addView(label, android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-        }
+        container.setBackgroundColor(Color.argb(220, 200, 40, 40))
+        container.addView(label, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
 
         val params = WindowManager.LayoutParams(
-            (80 * resources.displayMetrics.density).toInt(),
-            (80 * resources.displayMetrics.density).toInt(),
+            sizePx, sizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 50
-            y = 300
+            x = 20
+            y = 400
         }
 
-        container.setOnTouchListener(object : View.OnTouchListener {
-            private var isDrag = false
+        var initialX = 0; var initialY = 0
+        var initialTouchX = 0f; var initialTouchY = 0f
+        var isDrag = false
 
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        isDrag = false
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = event.rawX - initialTouchX
-                        val dy = event.rawY - initialTouchY
-                        if (sqrt(dx * dx + dy * dy) > 10f) isDrag = true
-                        params.x = initialX + dx.toInt()
-                        params.y = initialY + dy.toInt()
-                        windowManager?.updateViewLayout(container, params)
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (!isDrag) {
-                            performDodge()
-                        }
-                    }
+        container.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    isDrag = false
+                    initialX = params.x; initialY = params.y
+                    initialTouchX = event.rawX; initialTouchY = event.rawY
                 }
-                return true
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - initialTouchX
+                    val dy = event.rawY - initialTouchY
+                    if (sqrt(dx * dx + dy * dy) > 8f) isDrag = true
+                    params.x = initialX + dx.toInt()
+                    params.y = initialY + dy.toInt()
+                    windowManager?.updateViewLayout(container, params)
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!isDrag) performDodge()
+                }
             }
-        })
+            true
+        }
 
         floatingView = container
-        windowManager?.addView(container, params)
+        try {
+            windowManager?.addView(container, params)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка наложения: ${e.message}", Toast.LENGTH_SHORT).show()
+            stopSelf()
+        }
     }
 
     private fun performDodge() {
@@ -118,17 +112,29 @@ class FloatingButtonService : Service() {
         val dm = resources.displayMetrics
         val cx = dm.widthPixels / 2
         val cy = dm.heightPixels / 2
-        val offset = dm.heightPixels / 4
-
-        // Dodge upward by default
+        val offset = dm.heightPixels / 5
         svc.dispatchAvoidanceSwipe(cx, cy, cx, cy - offset)
     }
 
     override fun onDestroy() {
         isRunning = false
-        floatingView?.let { windowManager?.removeView(it) }
+        try { floatingView?.let { windowManager?.removeView(it) } } catch (_: Exception) {}
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun createNotificationChannel() {
+        val ch = NotificationChannel(CHANNEL_ID, "HSUI Кнопка уворота", NotificationManager.IMPORTANCE_LOW)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+    }
+
+    private fun buildNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Кнопка уворота активна ⚡")
+            .setContentText("Нажмите на кнопку в игре для уворота")
+            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
 }
