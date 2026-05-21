@@ -18,12 +18,12 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
     companion object {
-        const val REQUEST_CODE_SCREEN_CAPTURE = 100
-        const val REQUEST_CODE_NOTIFICATION = 101
+        const val REQUEST_CODE_CAPTURE = 100
+        const val REQUEST_CODE_NOTIF = 101
         const val REQUEST_CODE_OVERLAY = 102
     }
 
-    private lateinit var mediaProjectionManager: MediaProjectionManager
+    private lateinit var projManager: MediaProjectionManager
     private lateinit var statusText: TextView
     private lateinit var startButton: Button
     private lateinit var floatButton: Button
@@ -33,77 +33,58 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        projManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         statusText = findViewById(R.id.statusText)
         startButton = findViewById(R.id.startButton)
         floatButton = findViewById(R.id.floatButton)
         hintText = findViewById(R.id.hintText)
 
         startButton.setOnClickListener {
-            if (ScreenCaptureService.isRunning) {
-                stopService(Intent(this, ScreenCaptureService::class.java))
+            val svc = TouchSimulationService.instance
+            if (svc == null) {
+                Toast.makeText(this, "Сначала включите HSUI Engine в Настройки → Спец. возможности", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            if (svc.isCapturing) {
+                svc.stopCapture()
                 updateUI()
             } else {
-                if (TouchSimulationService.instance == null) {
-                    Toast.makeText(this,
-                        "Сначала включите HSUI Engine в Настройки → Спец. возможности",
-                        Toast.LENGTH_LONG).show()
-                    return@setOnClickListener
-                }
-                requestCapture()
+                requestNotifThenCapture()
             }
         }
 
         floatButton.setOnClickListener {
             if (FloatingButtonService.isRunning) {
                 stopService(Intent(this, FloatingButtonService::class.java))
-                updateUI()
             } else {
                 if (!Settings.canDrawOverlays(this)) {
                     Toast.makeText(this, "Разрешите отображение поверх других приложений", Toast.LENGTH_LONG).show()
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
+                    startActivityForResult(
+                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+                        REQUEST_CODE_OVERLAY
                     )
-                    startActivityForResult(intent, REQUEST_CODE_OVERLAY)
                 } else {
-                    startFloatingButton()
+                    startService(Intent(this, FloatingButtonService::class.java))
+                    Toast.makeText(this, "Кнопка уворота ⚡ появится поверх игры", Toast.LENGTH_SHORT).show()
                 }
             }
+            updateUI()
         }
     }
 
-    private fun startFloatingButton() {
-        val intent = Intent(this, FloatingButtonService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+    private fun requestNotifThenCapture() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_CODE_NOTIF)
         } else {
-            startService(intent)
+            startActivityForResult(projManager.createScreenCaptureIntent(), REQUEST_CODE_CAPTURE)
         }
-        updateUI()
-        Toast.makeText(this, "Кнопка уворота появится поверх игры ⚡", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun requestCapture() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    REQUEST_CODE_NOTIFICATION)
-                return
-            }
-        }
-        startActivityForResult(
-            mediaProjectionManager.createScreenCaptureIntent(),
-            REQUEST_CODE_SCREEN_CAPTURE
-        )
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_CODE_NOTIFICATION) {
-            startActivityForResult(mediaProjectionManager.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_CAPTURE)
+        if (requestCode == REQUEST_CODE_NOTIF) {
+            startActivityForResult(projManager.createScreenCaptureIntent(), REQUEST_CODE_CAPTURE)
         }
     }
 
@@ -111,23 +92,27 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         when (requestCode) {
-            REQUEST_CODE_SCREEN_CAPTURE -> {
+            REQUEST_CODE_CAPTURE -> {
                 if (resultCode == Activity.RESULT_OK && data != null) {
-                    val intent = Intent(this, ScreenCaptureService::class.java).apply {
-                        putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
-                        putExtra(ScreenCaptureService.EXTRA_RESULT_DATA, data)
+                    val svc = TouchSimulationService.instance
+                    if (svc == null) {
+                        Toast.makeText(this, "Включите спец. возможности!", Toast.LENGTH_LONG).show()
+                        return
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
+                    svc.startCapture(resultCode, data)
+                    if (svc.isCapturing) {
+                        Toast.makeText(this, "Автоуворот запущен! Заходи в игру.", Toast.LENGTH_SHORT).show()
                     } else {
-                        startService(intent)
+                        Toast.makeText(this, "Не удалось запустить. Попробуй ещё раз.", Toast.LENGTH_LONG).show()
                     }
                     updateUI()
                 }
             }
             REQUEST_CODE_OVERLAY -> {
                 if (Settings.canDrawOverlays(this)) {
-                    startFloatingButton()
+                    startService(Intent(this, FloatingButtonService::class.java))
+                    Toast.makeText(this, "Кнопка уворота ⚡ появится поверх игры", Toast.LENGTH_SHORT).show()
+                    updateUI()
                 }
             }
         }
@@ -139,29 +124,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        val accessEnabled = TouchSimulationService.instance != null
+        val svc = TouchSimulationService.instance
+        val capturing = svc?.isCapturing == true
+        val accessOn = svc != null
 
-        if (ScreenCaptureService.isRunning) {
-            statusText.text = "✅ Автоуворот активен"
-            startButton.text = "Остановить автоуворот"
-            startButton.setBackgroundColor(0xFFE53935.toInt())
-        } else {
-            statusText.text = "⏸ Автоуворот выключен"
-            startButton.text = "Запустить автоуворот"
-            startButton.setBackgroundColor(0xFF43A047.toInt())
+        statusText.text = when {
+            capturing -> "✅ Автоуворот активен"
+            else -> "⏸ Автоуворот выключен"
         }
+        startButton.text = if (capturing) "Остановить автоуворот" else "Запустить автоуворот"
+        startButton.setBackgroundColor(if (capturing) 0xFFE53935.toInt() else 0xFF43A047.toInt())
 
-        if (FloatingButtonService.isRunning) {
-            floatButton.text = "Убрать кнопку ⚡"
-            floatButton.setBackgroundColor(0xFFE53935.toInt())
-        } else {
-            floatButton.text = "Кнопка уворота ⚡"
-            floatButton.setBackgroundColor(0xFF1565C0.toInt())
-        }
+        floatButton.text = if (FloatingButtonService.isRunning) "Убрать кнопку ⚡" else "Кнопка уворота ⚡"
+        floatButton.setBackgroundColor(if (FloatingButtonService.isRunning) 0xFFE53935.toInt() else 0xFF1565C0.toInt())
 
-        hintText.text = if (accessEnabled)
-            "Спец. возможности: ✅ включено"
-        else
-            "⚠️ Включите HSUI Engine в\nНастройки → Спец. возможности"
+        hintText.text = if (accessOn) "Спец. возможности: ✅ включено"
+        else "⚠️ Включите HSUI Engine в\nНастройки → Спец. возможности"
     }
 }
