@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <media/NdkImage.h>
+#include <media/NdkImageReader.h>
 #include <opencv2/opencv.hpp>
 #include <cmath>
 #include <atomic>
