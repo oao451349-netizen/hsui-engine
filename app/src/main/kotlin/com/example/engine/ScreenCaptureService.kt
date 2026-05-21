@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
@@ -41,7 +42,13 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification())
+        // MUST specify foreground service type for media projection on Android 10+
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
         if (resultCode == -1) { stopSelf(); return START_NOT_STICKY }
@@ -52,7 +59,6 @@ class ScreenCaptureService : Service() {
             @Suppress("DEPRECATION")
             intent?.getParcelableExtra(EXTRA_RESULT_DATA)
         }
-
         if (resultData == null) { stopSelf(); return START_NOT_STICKY }
 
         val touchSvc = TouchSimulationService.instance
@@ -76,27 +82,21 @@ class ScreenCaptureService : Service() {
             val density = metrics.densityDpi
 
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-
             virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "HSUI_Capture",
-                width, height, density,
+                "HSUI_Capture", width, height, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface,
-                null, null
+                imageReader?.surface, null, null
             )
 
             decisionEngine = AutomatedDecisionEngine(touchSvc, width, height).also { engine ->
-                // Set ROI to center of screen (where action usually happens)
                 val roiSize = minOf(width, height) / 2
-                val roiX = (width - roiSize) / 2
-                val roiY = (height - roiSize) / 2
-                engine.setRoi(roiX, roiY, roiSize, roiSize)
+                engine.setRoi((width - roiSize) / 2, (height - roiSize) / 2, roiSize, roiSize)
                 imageReader?.let { engine.attachImageReader(it) }
             }
 
             isRunning = true
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка запуска: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
             stopSelf()
         }
 
@@ -117,23 +117,18 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID, "HSUI Engine", NotificationManager.IMPORTANCE_LOW
-        )
+        val channel = NotificationChannel(CHANNEL_ID, "HSUI Engine", NotificationManager.IMPORTANCE_LOW)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        val pi = PendingIntent.getActivity(this, 0,
+            Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("HSUI Engine активен")
-            .setContentText("Отслеживание экрана — автоуворот включён")
+            .setContentText("Автоуворот включён")
             .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(pi)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
