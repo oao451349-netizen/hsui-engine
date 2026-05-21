@@ -1,6 +1,5 @@
 #include <jni.h>
 #include <android/log.h>
-#include <media/NdkImage.h>
 #include <opencv2/opencv.hpp>
 #include <cmath>
 #include <atomic>
@@ -32,13 +31,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_example_engine_AutomatedDecisionEngine_processFrameNative(
         JNIEnv* env, jobject thiz, jobject imageObj) {
 
-    // Obtain AImage from Java ImageReader image via NDK
-    AImageReader* nativeReader = nullptr; // managed externally
-    AImage* nativeImage = nullptr;
-
-    // Get Y-plane data (luminance) directly without copying
     uint8_t* yData = nullptr;
-    int yLen = 0;
     int32_t width = 0, height = 0;
 
     // Reflect into Java to get plane buffer (zero-copy path)
