@@ -14,7 +14,7 @@
         android:textSize="32sp"
         android:textColor="#FFFFFF"
         android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="4dp" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -22,26 +22,36 @@
         android:text="Движок автоуклонения"
         android:textSize="14sp"
         android:textColor="#888888"
-        android:layout_marginBottom="56dp" />
+        android:layout_marginBottom="48dp" />
 
     <TextView
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="⏸ Движок остановлен"
+        android:text="⏸ Автоуворот выключен"
         android:textSize="20sp"
         android:textColor="#FFFFFF"
-        android:layout_marginBottom="32dp" />
+        android:layout_marginBottom="24dp" />
 
     <Button
         android:id="@+id/startButton"
-        android:layout_width="220dp"
+        android:layout_width="260dp"
         android:layout_height="56dp"
-        android:text="Запустить"
-        android:textSize="17sp"
+        android:text="Запустить автоуворот"
+        android:textSize="15sp"
         android:textColor="#FFFFFF"
         android:backgroundTint="#43A047"
-        android:layout_marginBottom="40dp" />
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/floatButton"
+        android:layout_width="260dp"
+        android:layout_height="56dp"
+        android:text="Кнопка уворота ⚡"
+        android:textSize="15sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#1565C0"
+        android:layout_marginBottom="36dp" />
 
     <TextView
         android:id="@+id/hintText"
