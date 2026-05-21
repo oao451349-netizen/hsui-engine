@@ -7,11 +7,9 @@ android {
     namespace = "com.example.engine"
     compileSdk = 35
 
-    ndkVersion = "25.2.9519653"
-
     defaultConfig {
         applicationId = "com.example.engine"
-        minSdk = 24
+        minSdk = 24          // GestureDescription requires API 24
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
