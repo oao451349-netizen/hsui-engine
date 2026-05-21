@@ -21,26 +21,27 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
-        run: echo "y" | sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
+      - name: Install NDK and CMake
+        run: sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
 
       - name: Download OpenCV Android SDK
         run: |
           wget -q https://github.com/opencv/opencv/releases/download/4.9.0/opencv-4.9.0-android-sdk.zip
           unzip -q opencv-4.9.0-android-sdk.zip -d $HOME
-          echo "OPENCV_DIR=$HOME/OpenCV-android-sdk/sdk/native/jni" >> $GITHUB_ENV
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew || true
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
-      - name: Create local.properties
+      - name: Create config files
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "OPENCV_DIR=${{ env.OPENCV_DIR }}" >> gradle.properties
           echo "ndk.dir=$ANDROID_SDK_ROOT/ndk/25.2.9519653" >> local.properties
+          echo "OPENCV_DIR=$HOME/OpenCV-android-sdk/sdk/native/jni" >> gradle.properties
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
