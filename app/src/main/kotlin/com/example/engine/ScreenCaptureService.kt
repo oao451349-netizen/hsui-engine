@@ -12,9 +12,11 @@ import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 
 class ScreenCaptureService : Service() {
@@ -41,49 +43,74 @@ class ScreenCaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
 
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1)
-            ?: run { stopSelf(); return START_NOT_STICKY }
-        val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-            ?: run { stopSelf(); return START_NOT_STICKY }
-        val touchSvc = TouchSimulationService.instance
-            ?: run { stopSelf(); return START_NOT_STICKY }
+        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
+        if (resultCode == -1) { stopSelf(); return START_NOT_STICKY }
 
-        val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
-
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getRealMetrics(metrics)
-
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
-
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "HSUI_Capture",
-            width, height, density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null, null
-        )
-
-        decisionEngine = AutomatedDecisionEngine(touchSvc, width, height).also { engine ->
-            imageReader?.let { engine.attachImageReader(it) }
+        val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra(EXTRA_RESULT_DATA)
         }
 
-        isRunning = true
+        if (resultData == null) { stopSelf(); return START_NOT_STICKY }
+
+        val touchSvc = TouchSimulationService.instance
+        if (touchSvc == null) {
+            Toast.makeText(this, "Включите спец. возможности!", Toast.LENGTH_LONG).show()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        try {
+            val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+
+            val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+
+            val width = metrics.widthPixels
+            val height = metrics.heightPixels
+            val density = metrics.densityDpi
+
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "HSUI_Capture",
+                width, height, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null, null
+            )
+
+            decisionEngine = AutomatedDecisionEngine(touchSvc, width, height).also { engine ->
+                // Set ROI to center of screen (where action usually happens)
+                val roiSize = minOf(width, height) / 2
+                val roiX = (width - roiSize) / 2
+                val roiY = (height - roiSize) / 2
+                engine.setRoi(roiX, roiY, roiSize, roiSize)
+                imageReader?.let { engine.attachImageReader(it) }
+            }
+
+            isRunning = true
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка запуска: ${e.message}", Toast.LENGTH_LONG).show()
+            stopSelf()
+        }
+
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         isRunning = false
-        decisionEngine?.release()
-        virtualDisplay?.release()
-        imageReader?.close()
-        mediaProjection?.stop()
+        try {
+            decisionEngine?.release()
+            virtualDisplay?.release()
+            imageReader?.close()
+            mediaProjection?.stop()
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 
@@ -103,8 +130,8 @@ class ScreenCaptureService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HSUI Engine")
-            .setContentText("Движок активен — отслеживание экрана")
+            .setContentTitle("HSUI Engine активен")
+            .setContentText("Отслеживание экрана — автоуворот включён")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
